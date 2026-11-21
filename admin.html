@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>管理后台 · 雅思词汇工作台</title>
+<style>
+  :root{--bg:#f5f6fa;--card:#fff;--line:#e8eaf0;--txt:#1f2329;--muted:#7c8594;--pri:#4f46e5;--red:#dc2626;--green:#047857;}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+  header{background:linear-gradient(135deg,#6d28d9,#4f46e5);color:#fff;padding:16px 16px 14px}
+  header h1{margin:0;font-size:17px;font-weight:600}
+  header p{margin:4px 0 0;font-size:12px;opacity:.85}
+  .wrap{padding:12px;max-width:900px;margin:0 auto}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  input[type=text],input[type=search]{flex:1;min-width:130px;padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-size:14px;outline:none}
+  button{border:none;border-radius:9px;padding:8px 12px;font-size:13px;cursor:pointer;background:#eef2ff;color:var(--pri);font-weight:500}
+  button.primary{background:var(--pri);color:#fff}
+  button.danger{background:#fef2f2;color:var(--red)}
+  button.ok{background:#ecfdf5;color:var(--green)}
+  button:disabled{opacity:.5}
+  .stats{display:flex;gap:18px;font-size:12px;color:var(--muted);margin-top:8px}
+  .stats b{display:block;font-size:17px;color:var(--txt)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:9px 6px;text-align:left;border-bottom:1px solid var(--line);vertical-align:middle}
+  th{font-size:12px;color:var(--muted);font-weight:500;white-space:nowrap}
+  tr.banned td{background:#fff5f5}
+  .name{font-weight:600}
+  .sub{font-size:11px;color:var(--muted);word-break:break-all}
+  .tag{display:inline-block;font-size:11px;padding:1px 6px;border-radius:20px;margin-left:4px}
+  .tag.red{background:#fee2e2;color:#b91c1c}
+  .tag.gray{background:#f1f5f9;color:#64748b}
+  .tag.green{background:#dcfce7;color:#15803d}
+  .ops{display:flex;gap:6px;flex-wrap:wrap}
+  .ops button{padding:5px 9px;font-size:12px}
+  .empty{padding:24px;text-align:center;color:var(--muted);font-size:13px}
+  .hint{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.6}
+  .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#111827;color:#fff;padding:9px 16px;border-radius:20px;font-size:13px;opacity:0;transition:.25s;pointer-events:none;z-index:99}
+  .toast.show{opacity:1}
+  @media(max-width:560px){.hide-sm{display:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>管理后台</h1>
+  <p>设备识别 · 封禁 · 白名单</p>
+</header>
+<div class="wrap">
+  <div class="card" id="keybox" style="display:none">
+    <div class="row">
+      <input type="text" id="keyInput" placeholder="输入管理员密钥">
+      <button class="primary" onclick="saveKey()">进入</button>
+    </div>
+  </div>
+
+  <div class="card" id="panel" style="display:none">
+    <div class="row">
+      <input type="search" id="q" placeholder="搜索昵称 / 机型" oninput="renderTable()">
+      <button onclick="load()">刷新</button>
+    </div>
+    <div class="stats">
+      <div><b id="sUsers">0</b>用户</div>
+      <div><b id="sActive">0</b>近 3 天活跃</div>
+      <div><b id="sBanned">0</b>已封禁</div>
+      <div><b id="sWl">-</b>白名单</div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button id="wlBtn" class="ok" onclick="toggleWhitelist()">开启白名单</button>
+      <span class="hint" id="wlHint"></span>
+    </div>
+  </div>
+
+  <div class="card" id="modelCard" style="display:none">
+    <div style="font-size:13px;font-weight:600;margin-bottom:8px">机型拦截</div>
+    <div class="row">
+      <input type="text" id="modelInput" placeholder="机型名，如：小米 13 Ultra">
+      <button class="primary" onclick="addModel()">添加拦截</button>
+    </div>
+    <div id="modelList" style="margin-top:10px"></div>
+    <div id="triesBox" style="margin-top:12px"></div>
+  </div>
+
+  <div class="card" id="tableCard" style="display:none">
+    <table>
+      <thead><tr>
+        <th>昵称</th><th>设备</th><th class="hide-sm">设备 ID</th><th>最后活跃</th><th>学习量</th><th>操作</th>
+      </tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="empty" id="empty" style="display:none">没有匹配的用户</div>
+  </div>
+  <p class="hint" style="text-align:center">封禁 = 昵称 + 当前设备一起停用；对方换昵称仍会被设备拦截</p>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const QS = new URLSearchParams(location.search);
+let KEY = QS.get('key') || '';
+const SHARE = QS.get('sharecode') || '4UXVTG2ZXZ';
+/* 部署在 GitHub Pages 等外部静态站时，接口指向现有服务器；也可用 ?api=https://... 覆盖 */
+const API_BASE = QS.get('api') || (/\.github\.io$/.test(location.hostname) ? 'https://aec4ebd8ae745bece.app.workbuddy.host' : '');
+let users = [], whitelistOn = false, models = [], tries = [];
+
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 1800);
+}
+function saveKey(){
+  const v = document.getElementById('keyInput').value.trim();
+  if (!v) return;
+  KEY = v;
+  const q = new URLSearchParams(location.search);
+  q.set('key', v);
+  history.replaceState(null, '', '?' + q.toString());
+  boot();
+}
+async function api(path){
+  const url = API_BASE + path + (path.includes('?') ? '&' : '?') + 'key=' + encodeURIComponent(KEY) + '&sharecode=' + encodeURIComponent(SHARE);
+  const r = await fetch(url, { cache: 'no-store' });
+  if (r.status === 403) throw new Error('KEY');
+  return r.json();
+}
+async function load(){
+  try{
+    const d = await api('/api/admin/users');
+    users = d.users || []; whitelistOn = !!d.whitelist_on;
+    models = d.models || []; tries = d.tries || [];
+    renderStats(); renderTable(); renderModels();
+  }catch(e){
+    if (e.message === 'KEY'){ document.getElementById('panel').style.display='none'; document.getElementById('tableCard').style.display='none'; document.getElementById('keybox').style.display=''; toast('密钥错误'); }
+    else toast('加载失败：' + e.message);
+  }
+}
+function renderStats(){
+  const now = Date.now()/1000;
+  document.getElementById('sUsers').textContent = users.length;
+  document.getElementById('sActive').textContent = users.filter(u => now - u.updated < 3*86400).length;
+  document.getElementById('sBanned').textContent = users.filter(u => u.banned || u.dev_banned).length;
+  document.getElementById('sWl').textContent = whitelistOn ? '开' : '关';
+  const b = document.getElementById('wlBtn');
+  b.textContent = whitelistOn ? '关闭白名单' : '开启白名单';
+  b.className = whitelistOn ? 'danger' : 'ok';
+  document.getElementById('wlHint').textContent = whitelistOn ? '当前仅名单内用户可登录' : '当前所有人可注册使用';
+}
+function fmtTime(ts){
+  if (!ts) return '-';
+  const d = new Date(ts*1000), diff = (Date.now() - ts*1000)/1000;
+  if (diff < 3600) return Math.max(1, Math.round(diff/60)) + ' 分钟前';
+  if (diff < 86400) return Math.round(diff/3600) + ' 小时前';
+  const pad = n => String(n).padStart(2,'0');
+  return (d.getMonth()+1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
+function renderTable(){
+  const q = (document.getElementById('q').value || '').trim().toLowerCase();
+  const list = users.filter(u => !q || u.name.toLowerCase().includes(q) || (u.ua||'').toLowerCase().includes(q));
+  const tb = document.getElementById('tbody');
+  tb.innerHTML = list.map(u => {
+    const banned = u.banned || u.dev_banned;
+    return `<tr class="${banned?'banned':''}">
+      <td><span class="name">${esc(u.name)}</span>${u.allowed?'<span class="tag green">白名单</span>':''}${banned?'<span class="tag red">已封禁</span>':''}</td>
+      <td>${esc(u.ua || '未记录')}${u.dev_banned?'<span class="tag gray">设备已封</span>':''}</td>
+      <td class="hide-sm"><span class="sub">${esc((u.device||'').slice(0,14))}</span></td>
+      <td>${fmtTime(u.seen||u.updated)}</td>
+      <td>${u.words}</td>
+      <td><div class="ops">
+        ${banned
+          ? `<button class="ok" onclick="act('unban','${esc(u.name)}')">解封</button>`
+          : `<button class="danger" onclick="act('ban','${esc(u.name)}')">封禁</button>`}
+        ${u.allowed
+          ? `<button onclick="act('disallow','${esc(u.name)}')">移出白名单</button>`
+          : `<button onclick="act('allow','${esc(u.name)}')">加白名单</button>`}
+      </div></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('empty').style.display = list.length ? 'none' : '';
+}
+function esc(s){ return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+async function act(type, name){
+  if (type === 'ban' && !confirm('封禁「' + name + '」？该昵称和当前设备都将无法登录。')) return;
+  try{
+    const d = await api('/api/admin/' + type + '?name=' + encodeURIComponent(name));
+    if (!d.ok) throw new Error(d.error || '操作失败');
+    toast({ban:'已封禁',unban:'已解封',allow:'已加入白名单',disallow:'已移出白名单'}[type] || '完成');
+    load();
+  }catch(e){ toast(e.message === 'KEY' ? '密钥错误' : e.message); }
+}
+async function toggleWhitelist(){
+  try{
+    if (!whitelistOn){
+      if (!confirm('开启白名单：现有全部用户会自动加入，之后只有名单内可登录。继续？')) return;
+      await api('/api/admin/allowall');
+      toast('白名单已开启');
+    } else {
+      if (!confirm('关闭白名单：所有人都可以注册使用。继续？')) return;
+      await api('/api/admin/allowoff');
+      toast('白名单已关闭');
+    }
+    load();
+  }catch(e){ toast(e.message === 'KEY' ? '密钥错误' : e.message); }
+}
+function renderModels(){
+  const box = document.getElementById('modelList');
+  box.innerHTML = models.length
+    ? models.map(m => `<div class="row" style="margin:6px 0"><span class="tag red">${esc(m.model)}</span><button onclick="delModel('${esc(m.model)}')">移除</button></div>`).join('')
+    : '<div class="hint">暂无拦截机型</div>';
+  const tb = document.getElementById('triesBox');
+  tb.innerHTML = tries.length
+    ? `<div class="hint" style="margin-bottom:6px">最近被拦截的登录尝试</div>` +
+      tries.map(t => `<div class="row" style="margin:4px 0"><span class="name">${esc(t.name)}</span><span class="sub">${esc(t.model)}</span><span class="sub">${fmtTime(t.ts)}</span></div>`).join('')
+    : '';
+}
+async function addModel(){
+  const v = document.getElementById('modelInput').value.trim();
+  if (!v) return;
+  try{
+    await api('/api/admin/modelban?model=' + encodeURIComponent(v));
+    document.getElementById('modelInput').value = '';
+    toast('已添加拦截：' + v); load();
+  }catch(e){ toast(e.message === 'KEY' ? '密钥错误' : e.message); }
+}
+async function delModel(m){
+  try{ await api('/api/admin/modelunban?model=' + encodeURIComponent(m)); toast('已移除'); load(); }
+  catch(e){ toast(e.message === 'KEY' ? '密钥错误' : e.message); }
+}
+function boot(){
+  if (!KEY){ document.getElementById('keybox').style.display = ''; return; }
+  document.getElementById('keybox').style.display = 'none';
+  document.getElementById('panel').style.display = '';
+  document.getElementById('modelCard').style.display = '';
+  document.getElementById('tableCard').style.display = '';
+  load();
+}
+boot();
+setInterval(() => { if (KEY) load(); }, 30000);
+</script>
+</body>
+</html>

@@ -25,11 +25,30 @@
 - GitHub Pages：本仓库 Settings → Pages → Source 选 `main` 分支根目录
 - 或直接把 `index.html` 丢到任意静态空间 / 网盘直链 / 本地双击打开
 
+
+## 管理后台
+
+`admin.html` 是给站长用的用户管理页面：查看所有用户、机型、最后活跃时间，一键封禁昵称/设备、开关白名单、按机型拦截。
+
+打开方式（需在地址里带管理密钥）：
+
+```
+https://amamrgb.github.io/ielts-vocab/admin.html?key=你的密钥
+```
+
+说明：
+
+- 管理后台**必须连后端服务器**才有数据；页面部署在 GitHub Pages 上时会自动调用原服务器接口（CORS 已放开）
+- 如需指向别的服务器，加参数 `?api=https://你的域名`
+- 密钥不写在代码里，只通过 URL 传入，请勿公开分享带 key 的链接
+
 ## 目录
 
 ```
-index.html        完整应用（词库、样式、逻辑全部内联）
-server/server.py  早期多用户后端版本（Flask + SQLite，含封禁/白名单接口，仅供参考）
+index.html          完整应用（词库、样式、逻辑全部内联）
+admin.html          管理后台（独立页面，需后端配合）
+server/server.py    多用户后端（Flask + SQLite，含封禁/白名单/机型拦截接口）
+server/admin.html   管理后台的服务端副本
 ```
 
 > 单机版不依赖 `server/` 目录，删除也不影响使用。
