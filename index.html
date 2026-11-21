@@ -7827,13 +7827,10 @@ function stateKey(){ return "ielts-vocab-state-" + curUser; }
 function loadLocal(){ try { return JSON.parse(localStorage.getItem(stateKey()) || "{}"); } catch(e){ return {}; } }
 function saveState(){
   if (!curUser) return;
-  localStorage.setItem(stateKey(), JSON.stringify(state));
-  clearTimeout(syncTimer);
-  syncTimer = setTimeout(syncToServer, 800);
+  try{ localStorage.setItem(stateKey(), JSON.stringify(state)); }catch(e){}
+  try{ localStorage.setItem("ielts-vocab-last", curUser); }catch(e){}
 }
-function syncToServer(){
-  postJSON(apiURL("/api/progress"), { name: curUser, state, device: deviceId(), ua: navigator.userAgent }, 15000).catch(()=>{});
-}
+function syncToServer(){}
 /* 设备ID：本机唯一标识，用于封禁 */
 function deviceId(){
   try{
